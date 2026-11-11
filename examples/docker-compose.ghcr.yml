@@ -1,0 +1,12 @@
+# Runs the published image, no checkout or build needed:
+#   docker compose -f docker-compose.ghcr.yml up -d   ->   http://localhost:5199
+services:
+  glbmanipulator:
+    image: ghcr.io/stevenpg/glbmanipulator:latest
+    ports:
+      # Bound to loopback on purpose: the app has no authentication.
+      # Change to "5199:5199" only on a network you trust.
+      - "127.0.0.1:5199:5199"
+    environment:
+      MAX_UPLOAD_MB: "1024"
+    restart: unless-stopped

@@ -1,0 +1,13 @@
+# Builds the image from this checkout and runs it:
+#   docker compose up --build -d   ->   http://localhost:5199
+# To pull the published image instead, see examples/docker-compose.ghcr.yml.
+services:
+  glbmanipulator:
+    build: .
+    image: glbmanipulator:local
+    ports:
+      # Bound to loopback on purpose: the app has no authentication.
+      - "127.0.0.1:5199:5199"
+    environment:
+      MAX_UPLOAD_MB: "1024"
+    restart: unless-stopped

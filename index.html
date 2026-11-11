@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GLBManipulator</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <aside id="panel">
+      <header>
+        <h1>GLBManipulator</h1>
+        <button id="open" class="primary">Open GLB…</button>
+        <input id="file" type="file" accept=".glb,model/gltf-binary" hidden />
+        <p id="filename" class="muted">or drop a file anywhere</p>
+      </header>
+
+      <fieldset id="controls" disabled>
+        <section>
+          <h2>Forward axis</h2>
+          <div class="row">
+            <select id="forward">
+              <option value="+z">+Z (glTF standard)</option>
+              <option value="-z">−Z</option>
+              <option value="+x">+X</option>
+              <option value="-x">−X</option>
+            </select>
+          </div>
+          <p class="muted">Turn the model until its nose follows the orange arrow.</p>
+        </section>
+
+        <section>
+          <h2>Rotate</h2>
+          <div class="grid3">
+            <span class="lbl">Turn</span>
+            <button data-snap="turn,90" title="Q">⟲ 90°</button>
+            <button data-snap="turn,-90" title="E">⟳ 90°</button>
+            <span class="lbl">Tip</span>
+            <button data-snap="tip,-90" title="S">Back 90°</button>
+            <button data-snap="tip,90" title="W">Fwd 90°</button>
+            <span class="lbl">Roll</span>
+            <button data-snap="roll,-90" title="A">Left 90°</button>
+            <button data-snap="roll,90" title="D">Right 90°</button>
+          </div>
+          <div class="fine">
+            <label>Turn <input type="range" id="yaw" min="-45" max="45" step="0.1" value="0" /><input type="number" id="yawN" step="0.1" value="0" /></label>
+            <label>Tip <input type="range" id="pitch" min="-45" max="45" step="0.1" value="0" /><input type="number" id="pitchN" step="0.1" value="0" /></label>
+            <label>Roll <input type="range" id="roll" min="-45" max="45" step="0.1" value="0" /><input type="number" id="rollN" step="0.1" value="0" /></label>
+          </div>
+        </section>
+
+        <section>
+          <h2>Position</h2>
+          <label class="check"><input type="checkbox" id="center" checked /> Center on origin (X/Z)</label>
+          <label class="check"><input type="checkbox" id="ground" checked /> Sit on ground (Y = 0)</label>
+          <div class="xyz">
+            <span class="lbl">Nudge</span>
+            <label>X <input type="number" id="ox" step="0.01" value="0" /></label>
+            <label>Y <input type="number" id="oy" step="0.01" value="0" /></label>
+            <label>Z <input type="number" id="oz" step="0.01" value="0" /></label>
+          </div>
+        </section>
+
+        <section>
+          <h2>Scale</h2>
+          <div class="row">
+            <label class="grow">Factor <input type="number" id="scale" step="0.01" min="0.000001" value="1" /></label>
+          </div>
+          <div class="row">
+            <select id="fitDim">
+              <option value="length">Length</option>
+              <option value="width">Width</option>
+              <option value="height">Height</option>
+            </select>
+            <input type="number" id="fitVal" step="0.01" min="0" placeholder="metres" />
+            <button id="fit">Set</button>
+          </div>
+          <p id="dims" class="mono">—</p>
+        </section>
+
+        <section id="optimize">
+          <h2>Reduce size</h2>
+          <label class="check"><input type="checkbox" id="simplify" /> Simplify mesh</label>
+          <div class="fine">
+            <label title="Share of triangles to aim for">Keep <input type="range" id="ratio" min="5" max="95" step="1" value="50" /><input type="number" id="ratioN" min="1" max="100" step="1" value="50" /></label>
+            <label title="How far the surface may move, as % of the mesh size. The simplifier stops here even if the triangle target is not reached.">Error <input type="range" id="error" min="0.1" max="10" step="0.1" value="1" /><input type="number" id="errorN" min="0.01" max="100" step="0.1" value="1" /></label>
+          </div>
+          <div class="row">
+            <span class="lbl w">Textures</span>
+            <select id="texSize">
+              <option value="">Keep size</option>
+              <option value="4096">Max 4096 px</option>
+              <option value="2048">Max 2048 px</option>
+              <option value="1024">Max 1024 px</option>
+              <option value="512">Max 512 px</option>
+            </select>
+          </div>
+          <label class="check" title="Much smaller than PNG/JPEG. Needs a loader that supports EXT_texture_webp (three.js, Babylon, Blender 3.4+ do)."><input type="checkbox" id="webp" /> Convert textures to WebP</label>
+          <div class="row">
+            <span class="lbl w">Compress</span>
+            <select id="compression" title="Draco and Meshopt shrink geometry a lot, but the app loading the file needs the matching decoder.">
+              <option value="keep">Keep as is</option>
+              <option value="none">None (most compatible)</option>
+              <option value="draco">Draco</option>
+              <option value="meshopt">Meshopt</option>
+            </select>
+          </div>
+          <div class="row">
+            <button id="preview" class="grow">Preview result</button>
+            <button id="showOriginal" hidden>Show original</button>
+          </div>
+          <p id="stats" class="mono"></p>
+        </section>
+
+        <section>
+          <h2>Export</h2>
+          <label class="check" title="Writes the correction into the vertices so every node transform is identity. Falls back to a root node for animated or skinned models.">
+            <input type="checkbox" id="bake" /> Bake into geometry
+          </label>
+          <div class="row">
+            <button id="reset">Reset</button>
+            <button id="export" class="primary grow">Export aligned GLB</button>
+          </div>
+          <p id="status" class="muted"></p>
+        </section>
+      </fieldset>
+    </aside>
+
+    <main id="stage">
+      <div id="views">
+        <button data-view="persp">3D</button>
+        <button data-view="top">Top</button>
+        <button data-view="front">Front</button>
+        <button data-view="side">Side</button>
+      </div>
+      <div id="drop">Drop a .glb here</div>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
