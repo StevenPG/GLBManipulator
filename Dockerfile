@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- build the UI ----
-FROM node:22-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -11,13 +11,13 @@ COPY server ./server
 RUN npm run build
 
 # ---- production dependencies only ----
-FROM node:22-bookworm-slim AS deps
+FROM node:25-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # ---- runtime ----
-FROM node:22-bookworm-slim
+FROM node:25-bookworm-slim
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=5199
