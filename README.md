@@ -26,6 +26,9 @@ Built with [glTF Transform](https://gltf-transform.dev/) and
 - **Recenter and ground**: put the bounding-box centre on the origin and the
   lowest point at Y = 0, with manual X/Y/Z nudges.
 - **Rescale**: by factor, or by setting the real length, width or height in metres.
+- **Fix dark or flat models**: detects unlit materials, missing normals,
+  accidental full-metal materials and black vertex colours, and repairs them
+  on export.
 - **Reduce size**: mesh simplification, texture downscaling and WebP
   conversion, Draco or Meshopt compression, with a before/after preview.
 - **Non-destructive by default**: the correction is written as a single root
@@ -82,9 +85,33 @@ Then open <http://127.0.0.1:5199>.
 4. **Center** and **Sit on ground** are on by default. Use the nudge fields
    when the bounding-box centre is not the centre you want, for example when
    a mirror or antenna sticks out on one side.
-5. Optionally **rescale** and **reduce size** (see below).
+5. Check the **Lighting check** section if the model looks dark or flat, and
+   optionally **rescale** and **reduce size** (see below).
 6. **Export aligned GLB** downloads `<name>_aligned.glb`. The original file is
    never modified.
+
+### Models that look dark, black or flat
+
+Every file is checked on load. The **Lighting check** section lists what it
+found, with a fix for each that is applied on export. Hover a line to see the
+affected materials or meshes.
+
+| Finding | What you see | Fix | Ticked by default |
+| --- | --- | --- | --- |
+| Unlit materials (`KHR_materials_unlit`) | Flat colour with no shading, in every app | Converts them to ordinary lit materials | No: unlit is often an intentional style |
+| Meshes without normals | Black in some apps, faceted in others | Generates flat normals | Yes |
+| Fully metallic, untextured materials | Fine here, black in any app with no environment map | Sets them to non-metallic | No: real chrome looks the same in the file |
+| All-black vertex colours | Black regardless of material | Removes the vertex colours | Yes |
+
+The full-metal case is the usual cause of "it looked fine in the preview and
+black in my app": metal has no colour of its own and only reflects its
+surroundings, and glTF's default `metallicFactor` is 1, so exporters that
+leave the value out produce it by accident.
+
+**Brightness** and **Headlight**, above the view, only change the preview.
+Use them when the check finds nothing and the model is simply dim. They are
+never written to the file. Tick fixes and use **Preview result** to see what
+the exported file will look like.
 
 ### Reducing size
 
@@ -142,7 +169,7 @@ Environment variables read by the server:
 
 ```sh
 npm run dev      # Vite dev server with hot reload, API included
-npm test         # pipeline and HTTP API tests
+npm test         # pipeline, lighting and HTTP API tests
 npm run build    # production build into dist/
 npm run serve    # serve an existing build
 npm run sample   # regenerate the sample model
@@ -150,7 +177,7 @@ npm run sample   # regenerate the sample model
 
 ```
 index.html, src/     browser UI (three.js viewer and controls)
-server/realign.js    the glTF Transform pipeline: align, bake, optimise
+server/realign.js    the glTF Transform pipeline: align, bake, inspect, fix, optimise
 server/app.js        HTTP handlers shared by the dev and production servers
 server/index.js      production server
 test/                pipeline and API tests

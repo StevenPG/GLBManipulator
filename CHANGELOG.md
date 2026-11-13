@@ -6,6 +6,14 @@ Notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Lighting check: every file is inspected on load for unlit materials, meshes
+  without normals, untextured fully-metallic materials and all-black vertex
+  colours, with an optional fix for each on export.
+- `POST /api/inspect` endpoint and a `lighting` field in `x-optimize`.
+- Brightness slider and camera headlight in the viewer (preview only).
+
 ## [1.0.0] - 2026-11-11
 
 ### Added

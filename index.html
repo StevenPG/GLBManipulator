@@ -79,6 +79,24 @@
           <p id="dims" class="mono">—</p>
         </section>
 
+        <section id="lighting">
+          <h2>Lighting check</h2>
+          <p id="lightReport" class="muted first">Checking…</p>
+          <label class="check" id="fxUnlitRow" hidden title="These materials are flagged to ignore all lighting, so they show flat colour with no shading. The fix makes them ordinary lit materials.">
+            <input type="checkbox" id="fxUnlit" /> <span></span>
+          </label>
+          <label class="check" id="fxNormalsRow" hidden title="Without normals a surface cannot be shaded. Some apps show these meshes black, others faceted. The fix generates flat normals.">
+            <input type="checkbox" id="fxNormals" /> <span></span>
+          </label>
+          <label class="check" id="fxMetalRow" hidden title="Fully metallic with no texture: these only reflect their surroundings, so they turn black in any app without an environment map. Often an export mistake, but real chrome looks like this too. The fix sets them to non-metallic.">
+            <input type="checkbox" id="fxMetal" /> <span></span>
+          </label>
+          <label class="check" id="fxColorsRow" hidden title="Vertex colours multiply the material colour, and these are all black. The fix removes them.">
+            <input type="checkbox" id="fxColors" /> <span></span>
+          </label>
+          <p id="lightHint" class="muted" hidden>Tick a fix, then use <b>Preview result</b> below to see it. Fixes are applied on export.</p>
+        </section>
+
         <section id="optimize">
           <h2>Reduce size</h2>
           <label class="check"><input type="checkbox" id="simplify" /> Simplify mesh</label>
@@ -133,6 +151,10 @@
         <button data-view="top">Top</button>
         <button data-view="front">Front</button>
         <button data-view="side">Side</button>
+      </div>
+      <div id="light" title="Preview only. Does not change the exported file.">
+        <label>Brightness <input type="range" id="exposure" min="0.25" max="3" step="0.05" value="1" /></label>
+        <label><input type="checkbox" id="headlight" checked /> Headlight</label>
       </div>
       <div id="drop">Drop a .glb here</div>
     </main>

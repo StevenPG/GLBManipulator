@@ -16,6 +16,11 @@ try {
 
   const glb = await readFile(new URL('../examples/models/misaligned-car.glb', import.meta.url));
 
+  const report = await (await fetch(`${base}/api/inspect`, { method: 'POST', body: glb })).json();
+  assert.equal(report.triangles, 36);
+  assert.deepEqual(report.lighting.unlit, []);
+  assert.equal(report.lighting.missingNormals.length, 1); // the sample car ships without normals
+
   const bad = await fetch(`${base}/api/realign`, { method: 'POST', headers: { 'x-matrix': '[1,2,3]' }, body: glb });
   assert.equal(bad.status, 400);
 

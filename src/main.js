@@ -21,6 +21,12 @@ scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnviron
 
 const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 1000);
 camera.position.set(4, 3, 6);
+// A light that travels with the camera, so the side you are looking at is
+// never in shadow, whatever the model's materials do with the environment.
+const headlight = new THREE.DirectionalLight(0xffffff, 0.8);
+headlight.position.set(0.4, 0.6, 1);
+camera.add(headlight);
+scene.add(camera);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
@@ -201,6 +207,7 @@ async function load(f) {
     show(original);
     file = f;
     $('stats').textContent = '';
+    inspect(f);
     state = fresh();
     syncInputs();
     $('filename').textContent = `${f.name} · ${(f.size / 1048576).toFixed(2)} MB`;
@@ -224,9 +231,58 @@ function show(obj) {
   $('showOriginal').textContent = 'Show original';
 }
 
+// ---------- lighting check ----------
+const FIXES = [
+  // [report key, checkbox, row, ticked by default, label]
+  ['unlit', 'fxUnlit', 'fxUnlitRow', false, (n) => `Make ${n} unlit material${n > 1 ? 's' : ''} respond to light`],
+  ['missingNormals', 'fxNormals', 'fxNormalsRow', true, (n) => `Generate normals for ${n} mesh${n > 1 ? 'es' : ''} without them`],
+  ['fullMetal', 'fxMetal', 'fxMetalRow', false, (n) => `Make ${n} fully metallic material${n > 1 ? 's' : ''} non-metallic`],
+  ['blackVertexColors', 'fxColors', 'fxColorsRow', true, (n) => `Remove black vertex colours from ${n} mesh${n > 1 ? 'es' : ''}`],
+];
+const baseTitles = Object.fromEntries(FIXES.map(([, , row]) => [row, $(row).title]));
+
+async function inspect(f) {
+  const report = $('lightReport');
+  report.className = 'muted first';
+  report.textContent = 'Checking…';
+  $('lightHint').hidden = true;
+  FIXES.forEach(([, box, row]) => { $(row).hidden = true; $(box).checked = false; });
+  try {
+    const res = await fetch('/api/inspect', { method: 'POST', body: f });
+    if (!res.ok) throw new Error(await res.text());
+    const { lighting } = await res.json();
+    if (f !== file) return; // another file was opened meanwhile
+    let found = 0;
+    for (const [key, box, row, auto, text] of FIXES) {
+      const names = lighting[key] || [];
+      if (!names.length) continue;
+      found++;
+      $(row).hidden = false;
+      $(row).querySelector('span').textContent = text(names.length);
+      $(row).title = `${baseTitles[row]}\n\nAffected: ${names.slice(0, 12).join(', ')}${names.length > 12 ? ', …' : ''}`;
+      $(box).checked = auto;
+    }
+    $('lightHint').hidden = !found;
+    report.classList.toggle('warn', found > 0);
+    report.textContent = found
+      ? 'This file has things that make it render dark or flat. Hover a line for details.'
+      : 'Nothing in this file should make it render dark or flat. If it looks dim here, use Brightness above the view.';
+  } catch (err) {
+    console.error(err);
+    report.textContent = `Check failed: ${err.message}`;
+  }
+}
+
+function lightingOptions() {
+  const o = { unlit: $('fxUnlit').checked, normals: $('fxNormals').checked, metal: $('fxMetal').checked, vertexColors: $('fxColors').checked };
+  return Object.values(o).some(Boolean) ? o : null;
+}
+
 // ---------- size reduction ----------
 function optimizeOptions() {
   const o = { compression: $('compression').value };
+  const lighting = lightingOptions();
+  if (lighting) o.lighting = lighting;
   if ($('simplify').checked) o.simplify = { ratio: +$('ratio').value / 100, error: +$('error').value / 100 };
   const maxSize = +$('texSize').value || null;
   if (maxSize || $('webp').checked) o.textures = { maxSize, webp: $('webp').checked };
@@ -250,7 +306,10 @@ async function process(matrix, bake) {
 }
 
 const mb = (b) => (b / 1048576 >= 0.1 ? (b / 1048576).toFixed(2) + ' MB' : (b / 1024).toFixed(1) + ' KB');
-const pct = (a, b) => (b ? ` (${a <= b ? '−' : '+'}${Math.abs(Math.round((1 - a / b) * 100))}%)` : '');
+const pct = (a, b) => {
+  const p = b ? Math.round((1 - a / b) * 100) : 0;
+  return p ? ` (${p > 0 ? '−' : '+'}${Math.abs(p)}%)` : '';
+};
 function showStats(s) {
   $('stats').textContent =
     `Triangles ${s.trianglesBefore.toLocaleString()} → ${s.trianglesAfter.toLocaleString()}${pct(s.trianglesAfter, s.trianglesBefore)}\n` +
@@ -268,7 +327,7 @@ async function preview() {
     optimized = gltf.scene;
     show(optimized);
     update();
-    setStatus('Showing the reduced model. Orbit in close to check it.');
+    setStatus('Showing the result of the fixes and reduction. Orbit in close to check it.');
   } catch (err) {
     console.error(err);
     setStatus(`Preview failed: ${err.message}`);
@@ -368,15 +427,21 @@ $('showOriginal').addEventListener('click', () => {
     $(id).addEventListener('input', (e) => pair.forEach((o) => o !== id && ($(o).value = e.target.value))),
   ),
 );
-// Any change to the reduction settings makes the preview stale: go back to the original.
-$('optimize').addEventListener('input', () => {
+// Any change to the fix or reduction settings makes the preview stale: go back to the original.
+const invalidatePreview = () => {
   if (!optimized) return;
   optimized = null;
   show(original);
   $('stats').textContent = '';
   setStatus('');
   update();
-});
+};
+$('optimize').addEventListener('input', invalidatePreview);
+$('lighting').addEventListener('input', invalidatePreview);
+
+// viewer lighting (preview only)
+$('exposure').addEventListener('input', (e) => { renderer.toneMappingExposure = +e.target.value; });
+$('headlight').addEventListener('change', (e) => { headlight.visible = e.target.checked; });
 $('open').addEventListener('click', () => $('file').click());
 $('file').addEventListener('change', (e) => { load(e.target.files[0]); e.target.value = ''; });
 document.querySelectorAll('[data-view]').forEach((b) =>
