@@ -3,7 +3,7 @@
 import { createReadStream, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { realignBinary } from './realign.js';
+import { inspectBinary, realignBinary } from './realign.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const threeLibs = path.join(root, 'node_modules/three/examples/jsm/libs');
@@ -86,17 +86,33 @@ async function realign(req, res) {
   }
 }
 
+/** POST /api/inspect: body is the GLB; responds with a JSON report. */
+async function inspect(req, res) {
+  try {
+    const input = await readBody(req);
+    if (!input.byteLength) throw Object.assign(new Error('Request body is empty'), { status: 400 });
+    const report = await inspectBinary(input);
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(report));
+  } catch (err) {
+    if (!err.status) console.error('[inspect]', err);
+    res.statusCode = err.status || 500;
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.end(String(err?.message || err));
+  }
+}
+
 /** Connect-style middleware. Calls next() for anything it does not own. */
 export function handle(req, res, next) {
   const pathname = (req.url || '/').split('?')[0];
 
-  if (pathname === '/api/realign') {
+  if (pathname === '/api/realign' || pathname === '/api/inspect') {
     if (req.method !== 'POST') {
       res.statusCode = 405;
       res.setHeader('Allow', 'POST');
       return res.end('POST only');
     }
-    return realign(req, res);
+    return pathname === '/api/realign' ? realign(req, res) : inspect(req, res);
   }
   if (pathname === '/healthz') {
     res.setHeader('Content-Type', 'text/plain');

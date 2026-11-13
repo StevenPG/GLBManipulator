@@ -23,7 +23,7 @@
     "build": "vite build",
     "serve": "node server/index.js",
     "start": "npm run build && node server/index.js",
-    "test": "node test/realign.test.js && node test/server.test.js",
+    "test": "node test/realign.test.js && node test/lighting.test.js && node test/server.test.js",
     "sample": "node examples/make-sample.js"
   },
   "dependencies": {

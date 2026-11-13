@@ -1,7 +1,7 @@
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import {
-  flatten, clearNodeTransform, prune, dedup, weld, simplify, textureCompress, draco, meshopt,
+  flatten, clearNodeTransform, prune, dedup, weld, simplify, textureCompress, draco, meshopt, normals,
 } from '@gltf-transform/functions';
 import draco3d from 'draco3dgltf';
 import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
@@ -109,16 +109,99 @@ function detachAccessors(mesh, force = false) {
   }
 }
 
+const UNLIT = 'KHR_materials_unlit';
+const TRIANGLE_MODES = [4, 5, 6]; // TRIANGLES, TRIANGLE_STRIP, TRIANGLE_FAN
+
+const isUnlit = (material) => !!material.getExtension(UNLIT);
+/** Metal reflects its surroundings and has no colour of its own: with no
+ *  environment map to reflect, it renders black. glTF's default metallicFactor
+ *  is 1, so exporters that omit the value produce this by accident. */
+const isFullMetal = (material) =>
+  !isUnlit(material) && material.getMetallicFactor() >= 0.9 && !material.getMetallicRoughnessTexture();
+const lacksNormals = (prim) => TRIANGLE_MODES.includes(prim.getMode()) && !prim.getAttribute('NORMAL');
+/** Vertex colours multiply the base colour, so all-black ones blacken the mesh. */
+function hasBlackVertexColors(prim) {
+  const color = prim.getAttribute('COLOR_0');
+  if (!color || !color.getCount()) return false;
+  return color.getMaxNormalized([]).slice(0, 3).every((v) => v < 0.02);
+}
+
+/**
+ * Reports the things in a file that make it render dark, black or flat.
+ * Each entry lists the affected material or mesh names.
+ */
+export function inspectLighting(doc) {
+  const root = doc.getRoot();
+  const report = { unlit: [], fullMetal: [], missingNormals: [], blackVertexColors: [] };
+  const label = (prop, i, kind) => prop.getName() || `${kind} ${i}`;
+
+  root.listMaterials().forEach((material, i) => {
+    if (isUnlit(material)) report.unlit.push(label(material, i, 'material'));
+    else if (isFullMetal(material)) report.fullMetal.push(label(material, i, 'material'));
+  });
+  root.listMeshes().forEach((mesh, i) => {
+    const prims = mesh.listPrimitives();
+    if (prims.some(lacksNormals)) report.missingNormals.push(label(mesh, i, 'mesh'));
+    if (prims.some(hasBlackVertexColors)) report.blackVertexColors.push(label(mesh, i, 'mesh'));
+  });
+  return report;
+}
+
+/**
+ * Repairs what inspectLighting() reports. All fields optional booleans:
+ *   normals       generate normals where a mesh has none
+ *   unlit         turn unlit materials into ordinary lit ones (implies normals)
+ *   metal         make untextured fully-metallic materials non-metallic
+ *   vertexColors  drop all-black vertex colours
+ */
+export async function fixLighting(doc, opts = {}) {
+  const root = doc.getRoot();
+
+  if (opts.unlit) {
+    for (const material of root.listMaterials()) {
+      if (!isUnlit(material)) continue;
+      material.getExtension(UNLIT).dispose(); // also detaches it from the material
+      if (!material.getMetallicRoughnessTexture()) material.setMetallicFactor(0).setRoughnessFactor(0.9);
+    }
+    for (const ext of root.listExtensionsUsed()) {
+      if (ext.extensionName === UNLIT && ext.listProperties().length === 0) ext.dispose();
+    }
+  }
+  if (opts.metal) {
+    for (const material of root.listMaterials()) {
+      if (isFullMetal(material)) material.setMetallicFactor(0);
+    }
+  }
+  if (opts.vertexColors) {
+    for (const mesh of root.listMeshes()) {
+      for (const prim of mesh.listPrimitives()) {
+        if (hasBlackVertexColors(prim)) prim.setAttribute('COLOR_0', null);
+      }
+    }
+  }
+  if (opts.normals || opts.unlit) await doc.transform(normals({ overwrite: false }));
+}
+
+/** Bytes in, report out. */
+export async function inspectBinary(bytes) {
+  const io = await getIO();
+  const doc = await io.readBinary(bytes);
+  return { lighting: inspectLighting(doc), triangles: countTriangles(doc) };
+}
+
 const COMPRESSION_EXTS = ['KHR_draco_mesh_compression', 'EXT_meshopt_compression'];
 
 /**
- * Size reduction. All fields optional:
+ * Size reduction and repair. All fields optional:
+ *   lighting:    see fixLighting()
  *   simplify:    { ratio: 0..1 share of triangles to keep, error: 0..1 max deviation
  *                  as a fraction of the mesh's size }
  *   textures:    { maxSize: px | null, webp: boolean }
  *   compression: 'keep' | 'none' | 'draco' | 'meshopt'
  */
 export async function optimize(doc, opts = {}) {
+  if (opts.lighting) await fixLighting(doc, opts.lighting);
+
   const steps = [dedup()];
 
   if (opts.simplify) {

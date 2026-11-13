@@ -2,7 +2,7 @@
 
 | File | What it is |
 | --- | --- |
-| [`models/misaligned-car.glb`](models) | A blocky test "car" that is Z-up, points along +X and sits away from the origin. Drop it into the UI to try the controls. |
+| [`models/misaligned-car.glb`](models) | A blocky test "car" that is Z-up, points along +X, sits away from the origin, and has no normals and default full-metal materials. Drop it into the UI to try the controls. |
 | [`make-sample.js`](make-sample.js) | Generates that model (`npm run sample`). |
 | [`docker-compose.ghcr.yml`](docker-compose.ghcr.yml) | Runs the published image with Compose. |
 
@@ -21,6 +21,8 @@ The response body is the new GLB.
 
 ```jsonc
 {
+  "lighting":    { "normals": true, "unlit": true,     // repair what /api/inspect reports;
+                   "metal": true, "vertexColors": true }, // each flag is independent
   "simplify":    { "ratio": 0.5, "error": 0.01 },      // keep 50% of triangles, max 1% deviation
   "textures":    { "maxSize": 1024, "webp": true },    // cap resolution, convert to WebP
   "compression": "draco"                               // "keep" | "none" | "draco" | "meshopt"
@@ -34,6 +36,26 @@ The response body is the new GLB.
 | `x-bake-skipped` | Why baking was skipped, when it was |
 
 Errors come back as plain text with a 4xx or 5xx status.
+
+### Find out why a model renders dark
+
+```sh
+curl -s -X POST http://127.0.0.1:5199/api/inspect --data-binary @examples/models/misaligned-car.glb
+```
+
+```json
+{"lighting":{"unlit":[],"fullMetal":["body","cabin","headlights"],"missingNormals":["car"],"blackVertexColors":[]},"triangles":36}
+```
+
+Each list names the affected materials or meshes. The sample car has two of
+the four problems on purpose. Repair them without moving the model:
+
+```sh
+curl -X POST http://127.0.0.1:5199/api/realign \
+  -H 'x-matrix: [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]' \
+  -H 'x-optimize: {"lighting":{"normals":true,"metal":true}}' \
+  --data-binary @examples/models/misaligned-car.glb -o car_lit.glb
+```
 
 ### Fix the sample car
 
